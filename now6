@@ -61,10 +61,14 @@ WHERE
         )
     )
     AND (
+        -- Caso 1: La oferta está definida y coincide con la prioridad
         (S2.nombre = '< 6' AND T2.prioridad = 1)
         OR (S2.nombre = '< 15' AND T2.prioridad = 2)
         OR (S2.nombre = '>= 15' AND T2.prioridad = 3)
         OR (S2.nombre = '> 59' AND T2.prioridad = 4)
-        OR (S2.nombre IS NULL AND T2.prioridad = 0)
+        -- Caso 2: No hay oferta asociada y se permite usar una hora sin oferta
+        OR (S2.nombre IS NULL)
+        OR (S2.nombre = '')
     )
 LIMIT 1;
+
