@@ -1,0 +1,56 @@
+UPDATE horas_medicas_horamedica AS S1
+LEFT JOIN horas_medicas_tipooferta AS S2 ON S2.id = S1.oferta_id
+CROSS JOIN (
+    SELECT 
+        (CASE 
+            WHEN TIMESTAMPDIFF(YEAR, paciente.fecha_nacimiento, CURDATE()) < 6 THEN 1
+            WHEN TIMESTAMPDIFF(YEAR, paciente.fecha_nacimiento, CURDATE()) < 15 THEN 2
+            WHEN TIMESTAMPDIFF(YEAR, paciente.fecha_nacimiento, CURDATE()) BETWEEN 15 AND 59 THEN 3
+            WHEN TIMESTAMPDIFF(YEAR, paciente.fecha_nacimiento, CURDATE()) > 59 THEN 4
+            ELSE 0 
+        END) AS prioridad,
+        sector.id AS sector_id,
+        sector.nombre AS sector_nombre
+    FROM pacientes_paciente AS paciente
+    LEFT JOIN sitios_sector AS sector ON paciente.sector_id = sector.id
+    WHERE paciente.id = '${SQL_ESC(${VAL5})}'
+) AS T2
+SET 
+    S1.estado = FALSE,
+    S1.uuid = '${SQL_ESC(${VAL1})}',
+    S1.updated_at = DATE(NOW())
+WHERE 
+    S1.estado = TRUE
+    AND S1.hora > DATE_ADD(NOW(), INTERVAL 35 MINUTE)
+    AND S1.fecha = CURDATE()
+    AND S1.empresa_id = '${SQL_ESC(${VAL2})}'
+    AND S1.especialidad_id = '${SQL_ESC(${VAL4})}'
+    AND (
+        (T2.sector_id IS NOT NULL AND S1.sector_id = T2.sector_id)
+        OR (
+            (T2.sector_id IS NULL OR NOT EXISTS (
+                SELECT 1 
+                FROM horas_medicas_horamedica AS S3
+                WHERE 
+                    S3.estado = TRUE
+                    AND S3.hora > DATE_ADD(NOW(), INTERVAL 35 MINUTE)
+                    AND S3.fecha = CURDATE()
+                    AND S3.empresa_id = '${SQL_ESC(${VAL2})}'
+                    AND S3.especialidad_id = '${SQL_ESC(${VAL4})}'
+                    AND S3.sector_id = T2.sector_id
+            ))
+            AND S1.sector_id IN (
+                SELECT id 
+                FROM sitios_sector 
+                WHERE nombre IN ('TRANSVERSAL', 'SOME CENTRAL')
+            )
+        )
+    )
+    AND (
+        (S2.nombre = '< 6' AND T2.prioridad = 1)
+        OR (S2.nombre = '< 15' AND T2.prioridad = 2)
+        OR (S2.nombre = '>= 15' AND T2.prioridad = 3)
+        OR (S2.nombre = '> 59' AND T2.prioridad = 4)
+        OR (S2.nombre IS NULL AND T2.prioridad = 0)
+    )
+LIMIT 1;
