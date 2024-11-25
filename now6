@@ -1,0 +1,70 @@
+UPDATE horas_medicas_horamedica AS S1
+LEFT JOIN horas_medicas_tipooferta AS S2
+    ON S2.id = S1.oferta_id
+CROSS JOIN (
+    SELECT 
+        (CASE 
+            WHEN edad < 6 THEN 1 
+            WHEN edad < 15 THEN 2 
+            WHEN edad >= 15 AND edad <= 59 THEN 3 
+            WHEN edad > 59 THEN 4 
+            ELSE 0 
+        END) AS prioridad, 
+        sitios_sector.nombre AS sector_nombre
+    FROM (
+        SELECT 
+            TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE()) AS edad, 
+            sitios_sector.nombre
+        FROM pacientes_paciente
+        LEFT JOIN sitios_sector
+            ON pacientes_paciente.sector_id = sitios_sector.id
+        WHERE pacientes_paciente.id = '${SQL_ESC(${VAL5})}'
+    ) AS T1
+) AS T2
+SET 
+    S1.estado = FALSE, 
+    S1.uuid = '${SQL_ESC(${VAL1})}', 
+    S1.updated_at = DATE(NOW())
+WHERE 
+    S1.estado = TRUE
+    AND S1.hora > DATE_ADD(NOW(), INTERVAL 35 MINUTE)
+    AND S1.fecha = CURDATE()
+    AND S1.empresa_id = '${SQL_ESC(${VAL2})}'
+    AND S1.especialidad_id = '${SQL_ESC(${VAL4})}'
+    AND (
+        -- Condición 1: El sector del paciente coincide
+        (T2.sector_nombre IS NOT NULL 
+         AND S1.sector_nombre = T2.sector_nombre) 
+        OR 
+        -- Condición 2: El paciente no tiene sector, pero el sector es 'TRANSVERSAL' o 'SOME CENTRAL'
+        (
+            T2.sector_nombre IS NULL 
+            AND S1.sector_nombre IN ('TRANSVERSAL', 'SOME CENTRAL')
+        )
+        OR 
+        -- Condición 3: No existe otro sector válido para la misma especialidad y empresa
+        (
+            T2.sector_nombre IS NULL 
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM horas_medicas_horamedica AS S3
+                JOIN sitios_sector AS SS
+                    ON S3.sector_id = SS.id
+                WHERE 
+                    S3.estado = TRUE
+                    AND S3.hora > DATE_ADD(NOW(), INTERVAL 35 MINUTE)
+                    AND S3.fecha = CURDATE()
+                    AND S3.empresa_id = '${SQL_ESC(${VAL2})}'
+                    AND S3.especialidad_id = '${SQL_ESC(${VAL4})}'
+                    AND SS.nombre IN ('TRANSVERSAL', 'SOME CENTRAL')
+            )
+        )
+    )
+    AND (
+        (S2.nombre = '< 6' AND T2.prioridad = 1)
+        OR (S2.nombre = '< 15' AND T2.prioridad = 2)
+        OR (S2.nombre = '>= 15' AND T2.prioridad = 3)
+        OR (S2.nombre = '> 59' AND T2.prioridad = 4)
+        OR (S2.nombre IS NULL AND T2.prioridad = 0)
+    )
+LIMIT 1;
