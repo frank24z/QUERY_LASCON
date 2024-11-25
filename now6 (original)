@@ -52,5 +52,7 @@ WHERE
         OR (S2.nombre = '>= 15' AND T2.prioridad = 3)
         OR (S2.nombre = '> 59' AND T2.prioridad = 4)
         OR (S2.nombre IS NULL AND T2.prioridad = 0)
+        OR (S2.nombre IS NULL)
+        OR (S2.nombre = '')
     )
 LIMIT 1;
